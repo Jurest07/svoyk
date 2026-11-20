@@ -22,7 +22,7 @@ points = [
 ];
 
 uniquePoints = {
-    'r1t6':[500, 500, 500, 500, 500],
+    // 'r1t6':[500, 500, 500, 500, 500],
 };
 
 databaseQuestions = [];
