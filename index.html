@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>СВОЯ ИГРА</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="./media-index.js"></script>
+  <script src="./database.js"></script>
+</head>
+<body>
+<div class="game-container" id="app">
+
+  <!-- СТАРТ -->
+  <div id="startScreen">
+    <h1>СВОЯ ИГРА</h1>
+    <div class="btn-group">
+      <button class="btn" id="startBtn">▶ НАЧАТЬ</button>
+      <button class="btn btn-music" id="musicBtn">🎵 МУЗЫКА</button>
+    </div>
+  </div>
+
+  <!-- РАУНД -->
+  <div id="roundScreen">
+    <div id="roundLabel">1 РАУНД</div>
+  </div>
+
+  <!-- ТЕМЫ -->
+  <div id="topicsRunner"></div>
+
+  <!-- СЕТКА -->
+  <div id="gridScreen">
+    <div class="grid-wrapper" id="gridWrapper"></div>
+  </div>
+
+  <!-- КАРТОЧКА ВОПРОСА -->
+  <div id="questionCard">
+    <div class="q-content">
+      <!-- Кот в мешке -->
+      <div id="catBagReveal">
+        <div class="cat-icon">🐱</div>
+        <div class="cat-label">КОТ В МЕШКЕ</div>
+      </div>
+
+      <!-- Основной контент вопроса -->
+      <div id="questionContent" style="display: none; width: 100%; height: 100%; flex-direction: column; align-items: center; justify-content: center; gap: 20px;">
+        <div id="questionText">Вопрос</div>
+        <img id="questionImage" src="" alt="иллюстрация" style="display: none;">
+        <video id="answerVideo" controls playsinline preload="metadata" style="display: none;"></video>
+        <audio id="cardAudio" controls preload="metadata" style="display: none;"></audio>
+        <div id="answerBlock">
+          <div id="answerText"></div>
+          <img id="answerImage" src="" alt="ответ" style="display: none;">
+        </div>
+        <div class="card-buttons" id="cardButtons">
+          <button class="card-btn primary" id="showAnswerBtn">📖 ПОКАЗАТЬ ОТВЕТ</button>
+          <button class="card-btn" id="backToGrid">⬅ НАЗАД</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  (function() {
+    const GLOBAL_MUSIC_FILE = null;
+
+    // ---------- DOM ----------
+    const startScreen = document.getElementById('startScreen');
+    const roundScreen = document.getElementById('roundScreen');
+    const roundLabel = document.getElementById('roundLabel');
+    const topicsRunner = document.getElementById('topicsRunner');
+    const gridScreen = document.getElementById('gridScreen');
+    const gridWrapper = document.getElementById('gridWrapper');
+    const questionCard = document.getElementById('questionCard');
+    const questionText = document.getElementById('questionText');
+    const questionImage = document.getElementById('questionImage');
+    const answerBlock = document.getElementById('answerBlock');
+    const answerText = document.getElementById('answerText');
+    const answerImage = document.getElementById('answerImage');
+    const answerVideo = document.getElementById('answerVideo');
+    const cardAudio = document.getElementById('cardAudio');
+    const showAnswerBtn = document.getElementById('showAnswerBtn');
+    const backToGridBtn = document.getElementById('backToGrid');
+    const startBtn = document.getElementById('startBtn');
+    const musicBtn = document.getElementById('musicBtn');
+    const catBagReveal = document.getElementById('catBagReveal');
+    const questionContent = document.getElementById('questionContent');
+
+    let isAnswerShown = false;
+    let currentQuestionData = null;
+    const usedCells = new Set();
+    let currentRound = 1;
+    let isCatBagMode = false;
+    let pendingCellElement = null;
+    let pendingTheme = '';
+    let pendingPts = 0;
+
+    function hideAllScreens() {
+      startScreen.style.display =   'none';
+      roundScreen.style.display =   'none';
+      topicsRunner.style.display =  'none';
+      gridScreen.style.display =    'none';
+      questionCard.style.display =  'none';
+    }
+
+    function showScreen(el, display = 'flex') {
+      el.style.display = display;
+    }
+
+    function startRound(round) {
+      currentRound = round;
+      usedCells.clear();
+      roundLabel.textContent = `${currentRound} РАУНД`;
+      hideAllScreens();
+      showScreen(roundScreen, 'flex');
+      setTimeout(() => {
+        hideAllScreens();
+        showTopicsRunner();
+      }, 1200);
+    }
+
+    startBtn.addEventListener('click', () => startRound(1));
+
+    function showTopicsRunner() {
+      topicsRunner.innerHTML = '';
+      const duration = 10.0;
+      const spacing = 100 / 7;
+
+      themes[currentRound - 1].forEach((theme, idx) => {
+        const div = document.createElement('div');
+        div.className = 'topic-item';
+        div.textContent = theme;
+        div.style.animationDuration = `${duration}s`;
+        div.style.top = `${idx * spacing}%`;
+        topicsRunner.appendChild(div);
+      });
+
+      showScreen(topicsRunner, 'flex');
+
+      const totalTime = (themes.length - 1) * 0.5 + duration + 0.3;
+      setTimeout(() => {
+        hideAllScreens();
+        buildGrid();
+        showScreen(gridScreen, 'flex');
+      }, totalTime * 1000 + 200);
+    }
+
+    function buildGrid() {
+      gridWrapper.innerHTML = '';
+
+      themes[currentRound - 1].forEach((theme) => {
+        const themeCell = document.createElement('div');
+        themeCell.className = 'grid-cell theme';
+        themeCell.textContent = theme;
+        gridWrapper.appendChild(themeCell);
+
+        points[currentRound - 1].forEach((p) => {
+          const pointCell = document.createElement('div');
+          pointCell.className = 'grid-cell points';
+          pointCell.textContent = p;
+          pointCell.dataset.theme = theme;
+          pointCell.dataset.points = p;
+
+          const cellKey = `${theme}_${p}`;
+          if (usedCells.has(cellKey)) {
+            pointCell.classList.add('used');
+            pointCell.textContent = '';
+          }
+
+          pointCell.addEventListener('click', function() {
+            const t = this.dataset.theme;
+            const pts = parseInt(this.dataset.points, 10);
+            const key = `${t}_${pts}`;
+            if (usedCells.has(key)) return;
+
+            const questionData = databaseQuestions[currentRound - 1][t]?.[pts];
+            if (!questionData) return;
+            if (questionData.catBag) {
+              openCatBag(t, pts, this);
+            } else {
+              openQuestion(t, pts, this);
+            }
+          });
+          gridWrapper.appendChild(pointCell);
+        });
+      });
+    }
+
+    function openCatBag(theme, pts, cellElement) {
+      isCatBagMode = true;
+      pendingTheme = theme;
+      pendingPts = pts;
+      pendingCellElement = cellElement;
+
+      catBagReveal.style.display = 'flex';
+      questionContent.style.display = 'none';
+      hideAllScreens();
+      showScreen(questionCard, 'flex');
+
+      catBagReveal.onclick = function() {
+        if (pendingCellElement) {
+          const key = `${pendingTheme}_${pendingPts}`;
+          usedCells.add(key);
+          pendingCellElement.classList.add('used');
+          pendingCellElement.textContent = '';
+        }
+        isCatBagMode = false;
+        openQuestion(pendingTheme, pendingPts, null);
+      };
+    }
+
+    function setImage(image, source) {
+      image.style.display = source ? 'block' : 'none';
+      if (source) {
+        image.src = source;
+        image.classList.remove('hidden');
+      } else {
+        image.removeAttribute('src');
+      }
+    }
+
+    function setPlayerSource(player, source) {
+      player.pause();
+      if (source) {
+        player.src = source;
+      } else {
+        player.removeAttribute('src');
+      }
+      player.load();
+      player.style.display = source ? 'block' : 'none';
+      if (player === answerVideo) {
+        player.classList.toggle('visible', Boolean(source));
+      }
+    }
+
+    function playAnswerMedia(player) {
+      player.play().catch(error => {
+        if (error.name !== 'AbortError') {
+          console.warn('Не удалось автоматически воспроизвести ответ:', error);
+        }
+      });
+    }
+
+    function openQuestion(theme, pts, cellElement) {
+      const data = databaseQuestions[currentRound - 1]?.[theme]?.[pts];
+      if (!data) return;
+
+      currentQuestionData = data;
+      isAnswerShown = false;
+      isCatBagMode = false;
+      catBagReveal.style.display = 'none';
+      questionContent.style.display = 'flex';
+
+      renderCardSide();
+
+      if (cellElement) {
+        const cellKey = `${theme}_${pts}`;
+        usedCells.add(cellKey);
+        cellElement.classList.add('used');
+        cellElement.textContent = '';
+      }
+
+      hideAllScreens();
+      showScreen(questionCard, 'flex');
+    }
+
+    function renderCardSide() {
+      const data = currentQuestionData;
+      const video = isAnswerShown ? data.aVideo : data.qVideo;
+      const audio = isAnswerShown ? data.aMusic : (data.qMusic || data.musicFile);
+
+      questionText.textContent = isAnswerShown ? '' : (data.q || 'Вопрос');
+      questionText.classList.toggle('hidden', isAnswerShown || (data.type === 'image' && !data.q));
+      setImage(questionImage, isAnswerShown ? null : data.qImg);
+
+      answerText.textContent = isAnswerShown ? (data.a || '') : '';
+      setImage(answerImage, isAnswerShown ? data.aImg : null);
+      answerBlock.style.display = isAnswerShown && (data.a || data.aImg) ? 'block' : 'none';
+
+      setPlayerSource(answerVideo, video);
+      setPlayerSource(cardAudio, audio);
+
+      showAnswerBtn.textContent = isAnswerShown
+        ? '📖 ПОКАЗАТЬ ВОПРОС'
+        : '📖 ПОКАЗАТЬ ОТВЕТ';
+    }
+
+    showAnswerBtn.addEventListener('click', function() {
+      if (!currentQuestionData) return;
+
+      isAnswerShown = !isAnswerShown;
+      renderCardSide();
+
+      if (isAnswerShown && currentQuestionData.aVideo) {
+        playAnswerMedia(answerVideo);
+      } else if (isAnswerShown && currentQuestionData.aMusic) {
+        playAnswerMedia(cardAudio);
+      }
+    });
+
+    backToGridBtn.addEventListener('click', function() {
+      setPlayerSource(answerVideo, null);
+      setPlayerSource(cardAudio, null);
+      currentQuestionData = null;
+
+      if (isCatBagMode && pendingCellElement) {
+        const key = `${pendingTheme}_${pendingPts}`;
+        usedCells.add(key);
+        pendingCellElement.classList.add('used');
+        pendingCellElement.textContent = '';
+        isCatBagMode = false;
+      }
+
+      answerBlock.style.display = 'none';
+      isAnswerShown = false;
+      questionContent.style.display = 'none';
+      catBagReveal.style.display = 'none';
+
+      if (usedCells.size === themes[currentRound - 1].length * points[currentRound - 1].length && currentRound < themes.length) {
+        startRound(currentRound + 1);
+        return;
+      }
+
+      hideAllScreens();
+      buildGrid();
+      showScreen(gridScreen, 'flex');
+    });
+
+    hideAllScreens();
+    showScreen(startScreen, 'flex');
+  })();
+</script>
+</body>
+</html>
