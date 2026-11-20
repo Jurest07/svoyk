@@ -16,6 +16,7 @@
     <h1>СВОЯ ИГРА</h1>
     <div class="btn-group">
       <button class="btn" id="startBtn">▶ НАЧАТЬ</button>
+      <button class="btn btn-music" id="musicBtn">🎵 МУЗЫКА</button>
     </div>
   </div>
 
@@ -93,7 +94,7 @@
     let isCatBagMode = false;
     let pendingCellElement = null;
     let pendingTheme = '';
-    let pendingPts = 0;
+    let pendingQuestionId = null;
 
     function hideAllScreens() {
       startScreen.style.display =   'none';
@@ -148,48 +149,57 @@
     function buildGrid() {
       gridWrapper.innerHTML = '';
 
-      themes[currentRound - 1].forEach((theme) => {
+      const roundIndex = currentRound - 1;
+      const rows = themes[roundIndex].map(theme => ({
+        theme,
+        questions: Object.entries(databaseQuestions[roundIndex][theme] ?? {}),
+      }));
+      const columnCount = Math.max(5, ...rows.map(row => row.questions.length));
+      gridWrapper.style.gridTemplateColumns = columnCount === 5
+        ? ''
+        : `1.8fr repeat(${columnCount}, minmax(0, 1fr))`;
+
+      rows.forEach(({ theme, questions }) => {
         const themeCell = document.createElement('div');
         themeCell.className = 'grid-cell theme';
         themeCell.textContent = theme;
         gridWrapper.appendChild(themeCell);
 
-        points[currentRound - 1].forEach((p) => {
+        questions.forEach(([questionId, questionData]) => {
           const pointCell = document.createElement('div');
           pointCell.className = 'grid-cell points';
-          pointCell.textContent = p;
-          pointCell.dataset.theme = theme;
-          pointCell.dataset.points = p;
+          pointCell.textContent = questionData.points;
 
-          const cellKey = `${theme}_${p}`;
+          const cellKey = `${theme}_${questionId}`;
           if (usedCells.has(cellKey)) {
             pointCell.classList.add('used');
             pointCell.textContent = '';
           }
 
-          pointCell.addEventListener('click', function() {
-            const t = this.dataset.theme;
-            const pts = parseInt(this.dataset.points, 10);
-            const key = `${t}_${pts}`;
-            if (usedCells.has(key)) return;
-
-            const questionData = databaseQuestions[currentRound - 1][t]?.[pts];
-            if (!questionData) return;
+          pointCell.addEventListener('click', () => {
+            if (usedCells.has(cellKey)) return;
             if (questionData.catBag) {
-              openCatBag(t, pts, this);
+              openCatBag(theme, questionId, pointCell);
             } else {
-              openQuestion(t, pts, this);
+              openQuestion(theme, questionId, pointCell);
             }
           });
           gridWrapper.appendChild(pointCell);
         });
+
+        for (let column = questions.length; column < columnCount; column++) {
+          const emptyCell = document.createElement('div');
+          emptyCell.className = 'grid-cell';
+          emptyCell.setAttribute('aria-hidden', 'true');
+          gridWrapper.appendChild(emptyCell);
+        }
       });
     }
 
-    function openCatBag(theme, pts, cellElement) {
+    function openCatBag(theme, questionId, cellElement) {
       isCatBagMode = true;
       pendingTheme = theme;
-      pendingPts = pts;
+      pendingQuestionId = questionId;
       pendingCellElement = cellElement;
 
       catBagReveal.style.display = 'flex';
@@ -199,13 +209,13 @@
 
       catBagReveal.onclick = function() {
         if (pendingCellElement) {
-          const key = `${pendingTheme}_${pendingPts}`;
+          const key = `${pendingTheme}_${pendingQuestionId}`;
           usedCells.add(key);
           pendingCellElement.classList.add('used');
           pendingCellElement.textContent = '';
         }
         isCatBagMode = false;
-        openQuestion(pendingTheme, pendingPts, null);
+        openQuestion(pendingTheme, pendingQuestionId, null);
       };
     }
 
@@ -241,8 +251,8 @@
       });
     }
 
-    function openQuestion(theme, pts, cellElement) {
-      const data = databaseQuestions[currentRound - 1]?.[theme]?.[pts];
+    function openQuestion(theme, questionId, cellElement) {
+      const data = databaseQuestions[currentRound - 1]?.[theme]?.[questionId];
       if (!data) return;
 
       currentQuestionData = data;
@@ -254,7 +264,7 @@
       renderCardSide();
 
       if (cellElement) {
-        const cellKey = `${theme}_${pts}`;
+        const cellKey = `${theme}_${questionId}`;
         usedCells.add(cellKey);
         cellElement.classList.add('used');
         cellElement.textContent = '';
@@ -304,7 +314,7 @@
       currentQuestionData = null;
 
       if (isCatBagMode && pendingCellElement) {
-        const key = `${pendingTheme}_${pendingPts}`;
+        const key = `${pendingTheme}_${pendingQuestionId}`;
         usedCells.add(key);
         pendingCellElement.classList.add('used');
         pendingCellElement.textContent = '';
@@ -316,7 +326,12 @@
       questionContent.style.display = 'none';
       catBagReveal.style.display = 'none';
 
-      if (usedCells.size === themes[currentRound - 1].length * points[currentRound - 1].length && currentRound < themes.length) {
+      const roundIndex = currentRound - 1;
+      const questionCount = themes[roundIndex].reduce((total, theme) => {
+        return total + Object.keys(databaseQuestions[roundIndex][theme] ?? {}).length;
+      }, 0);
+
+      if (usedCells.size === questionCount && currentRound < themes.length) {
         startRound(currentRound + 1);
         return;
       }

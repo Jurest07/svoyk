@@ -21,6 +21,10 @@ points = [
     [200, 400, 600, 800, 1200],
 ];
 
+uniquePoints = {
+    'r1t6':[500, 500, 500, 500, 500],
+};
+
 databaseQuestions = [];
 for (let i = 0; i < themes.length; i++) {
     databaseQuestions[i] = {};
@@ -31,8 +35,13 @@ for (let i = 0; i < themes.length; i++) {
 
 for (let i = 0; i < themes.length; i++) {
     for (let j = 0; j < themes[i].length; j++) {
-        for (let k = 0; k < points[i].length; k++) {
-            databaseQuestions[i][themes[i][j]][points[i][k]] = {
+        const theme = themes[i][j];
+        const themeId = `r${i + 1}t${j + 1}`;
+        const themePoints = uniquePoints[themeId] || points[i];
+        themePoints.forEach((pts, index) => {
+            const questionId = index + 1;
+            const fileName = `${themeId}q${questionId}`;
+            databaseQuestions[i][theme][questionId] = {
                 q:      null,
                 a:      null,
                 qImg:   null,
@@ -43,14 +52,14 @@ for (let i = 0; i < themes.length; i++) {
                 aMusic: null,
                 type:   null,
                 catBag: false,
+                points: pts,
             }
-            let fileName = `r${i + 1}t${j + 1}q${k + 1}`;
-            const question = databaseQuestions[i][themes[i][j]][points[i][k]];
+            const question = databaseQuestions[i][theme][questionId];
             const media = mediaIndex[fileName];
             if (question && media) {
                 Object.assign(question, media);
             }
-        }
+        })
     }
 }
 console.log(databaseQuestions);
