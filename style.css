@@ -283,6 +283,7 @@ html, body {
 }
 
 #questionText {
+    white-space: pre-line;
     color: #ffffff;
     font-size: clamp(0.8rem, 3vw, 2.5rem);
     text-align: center;
@@ -352,6 +353,7 @@ html, body {
 }
 
 #answerText {
+    white-space: pre-line;
     color: #ffffff;
 }
 
